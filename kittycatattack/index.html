@@ -1,0 +1,260 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Hello world</title>
+</head>
+	<script src="pixi.min.js"></script>
+	<script src="proton-2.1.0.min.js"></script>
+	<style> * { padding: 0, margin: 0 }</style>
+<body>
+	<script type="text/javascript">
+		
+		//ALIASES
+		var Container = PIXI.Container,
+			autoDetectRenderer = PIXI.autoDetectRenderer,
+			loader = PIXI.loader,
+			resources = PIXI.loader.resources,
+			Sprite = PIXI.Sprite,
+			TextureCache = PIXI.utils.TextureCache;
+
+		var renderer = autoDetectRenderer(
+			256, 256,
+			{
+				antialias: false,
+				transparent: false,
+				resolution: 1
+			});
+		//renderer.view.style.position = "absolute";
+		//renderer.view.style.display = "block";
+		
+			
+
+		//renderer.view.style.border = "1px dashed black";
+		document.body.appendChild(renderer.view);
+		var stage = new Container();
+		renderer.render(stage);
+		
+
+		loader.add("images/treasureHunter.json")
+			.on("progress", loadProgressHandler)
+			.load(setup);
+
+		var dungeon, explorer, treasure, door, id;
+		var state;
+
+		var proton = new Proton();
+		var emitter = new Proton.Emitter();
+
+		function setup(){
+			//var cat = new Sprite(
+			//	resources["images/cat.png"].texture
+			//);
+			dungeon = new Sprite(TextureCache["dungeon.png"]);
+			stage.addChild(dungeon);
+			explorer = new Sprite(TextureCache["explorer.png"]);
+			stage.addChild(explorer);
+			treasure = new Sprite(TextureCache["treasure.png"]);
+			stage.addChild(treasure);
+			door = new Sprite(TextureCache["door.png"]);
+			stage.addChild(door);
+			
+			door.position.set(32, 0);
+
+			explorer.x = 68;
+			explorer.y = stage.height / 2 - explorer.height / 2;
+			explorer.vx = 0;
+			explorer.vy = 0;
+			treasure.x = stage.width - treasure.width - 48;
+			treasure.y = stage.height / 2 - treasure.height / 2;
+
+			var numberOfBlobs = 6,
+				spacing = 48,
+				xOffset = 150;
+
+			for(var i = 0; i < numberOfBlobs; i++){
+				var blob = new Sprite(TextureCache["blob.png"]);
+
+				// Spacing between blobs, xOffset from left screen border
+				var x = spacing * i + xOffset;
+
+				var y = randomInt(0, stage.height - blob.height);
+
+				blob.position.set(x, y);
+				stage.addChild(blob);
+			}
+
+			state = play;
+			renderer.resize(stage.width, stage.height);
+			renderer.render(stage);
+			setupKeyHandler();	
+			gameLoop();
+		}
+
+		
+		function gameLoop(){
+			requestAnimationFrame(gameLoop);
+			
+			state();
+			proton.update();
+			renderer.render(stage);
+
+		}
+
+		function play(){
+
+			explorer.x += explorer.vx;
+			explorer.y += explorer.vy;
+		}
+
+		function setupKeyHandler(){
+			var left = keyboard(65);
+			var right = keyboard(68);
+			var up = keyboard(87);
+			var down = keyboard(83);
+			var space = keyboard(32);
+			space.press = function(){
+
+				proton = new Proton();
+				emitter = new Proton.Emitter();
+
+				//set Rate
+				emitter.rate = new Proton.Rate(Proton.getSpan(10, 20), 0.1);
+
+				//add Initialize
+				//emitter.addInitialize(new Proton.Radius(1, 12));
+				emitter.addInitialize(new Proton.ImageTarget(TextureCache["treasure.png"]));
+				emitter.addInitialize(new Proton.Life(2, 4));
+				emitter.addInitialize(new Proton.Velocity(3, Proton.getSpan(0, 360), 'polar'));
+
+				//add Behaviour
+				emitter.addBehaviour(new Proton.Color('ff0000', 'random'));
+				emitter.addBehaviour(new Proton.Alpha(1, 0));
+
+				//set emitter position
+				emitter.p.x = explorer.x;
+				emitter.p.y = explorer.y;
+				emitter.emit();
+
+				//add emitter to the proton
+				proton.addEmitter(emitter);
+
+				// add canvas renderer
+				var renderer = new Proton.Renderer('other', proton);
+				renderer.onProtonUpdate = function(){
+					emitter.p.x = explorer.x;
+					emitter.p.y = explorer.y;
+				};
+				renderer.onParticleCreated = function(particle){
+					var particleSprite = new Sprite(particle.target);
+					particle.sprite = particleSprite;
+					stage.addChild(particle.sprite);
+				};
+				renderer.onParticleUpdate = function(particle){
+					transformSprite(particle.sprite, particle);
+				};
+				renderer.onParticleDead = function(particle){
+					stage.removeChild(particle.sprite);
+				};
+				renderer.start();
+
+				//use Euler integration calculation is more accurate (default false)
+				//Proton.USE_CLOCK = false or true;
+				console.log("pressed e");
+			}
+			space.release = function(){
+				emitter.end();
+			}
+			left.press = function(){
+				explorer.vx = -1;
+				
+			}
+			left.release = function(){
+				if(!right.isDown && explorer.vy === 0){
+					explorer.vx = 0;
+				}
+				//OVERRIDE
+				explorer.vx = 0;
+			}
+			right.press = function(){
+				explorer.vx = 1;
+			}
+			right.release = function(){
+				if(!left.isDown && explorer.vy === 0){
+					explorer.vx = 0;
+				}
+				explorer.vx = 0;
+			}
+			up.press = function(){
+				explorer.vy = -1;
+			}
+			up.release = function(){
+				if(!down.isDown && explorer.vy === 0){
+					explorer.vy = 0;
+				}
+				explorer.vy = 0;
+			}
+			down.press = function(){
+				explorer.vy = 1;
+			}
+			down.release = function(){
+				if(!up.isDown && explorer.vy === 0){
+					explorer.vy = 0;
+				}
+				explorer.vy = 0;
+			}
+		}
+
+		function transformSprite(particleSprite, particle){
+			particleSprite.position.x = particle.p.x;
+			particleSprite.position.y = particle.p.y;
+		}
+
+		function keyboard(keyCode){
+			var key = {};
+			key.code = keyCode;
+			key.isDown = false;
+			key.isUp = true;
+			key.press = undefined;
+			key.release = undefined;
+
+			key.downHandler = function(event) {
+				if(event.keyCode === key.code){
+					if(key.isUp && key.press) key.press();
+					key.isDown = true;
+					key.isUp = false;
+				}
+				event.preventDefault();
+			};
+
+			key.upHandler = function(event) {
+				if(event.keyCode === key.code){
+					if(key.isDown && key.release) key.release();
+					key.isDown = false;
+					key.isUp = true;
+				}
+				event.preventDefault();
+			};
+
+			window.addEventListener(
+				"keydown", key.downHandler.bind(key), false
+			);
+
+			window.addEventListener(
+				"keyup", key.upHandler.bind(key), false
+			);
+			return key;
+		}
+
+		function loadProgressHandler(loader, resource){
+			console.log("loading: ", + resource.url);
+			console.log("progress: ", + loader.progress + "%");
+		}
+
+		function randomInt(min, max){
+			return Math.floor(Math.random() * (max - min + 1)) + min;
+		}
+
+	</script>
+</body>
+</html>
