@@ -6,7 +6,6 @@
 </head>
 	<script src="pixi.min.js"></script>
 	<script src="proton-2.1.0.min.js"></script>
-	<style> * { padding: 0, margin: 0 }</style>
 <body>
 	<script type="text/javascript">
 		
@@ -16,7 +15,10 @@
 			loader = PIXI.loader,
 			resources = PIXI.loader.resources,
 			Sprite = PIXI.Sprite,
-			TextureCache = PIXI.utils.TextureCache;
+			TextureCache = PIXI.utils.TextureCache,
+			pContainer = new PIXI.particles.ParticleContainer();
+
+		var mousePos = {x: 0, y: 0};
 
 		var renderer = autoDetectRenderer(
 			256, 256,
@@ -41,6 +43,7 @@
 			.load(setup);
 
 		var dungeon, explorer, treasure, door, id;
+		var missiles = [];
 		var state;
 
 		var proton = new Proton();
@@ -83,20 +86,22 @@
 				blob.position.set(x, y);
 				stage.addChild(blob);
 			}
-
+			contain(explorer, {x: 28, y: 10, width: 488, height: 480});
 			state = play;
 			renderer.resize(stage.width, stage.height);
 			renderer.render(stage);
 			setupKeyHandler();	
+			setupMouseHandler()
 			gameLoop();
 		}
+
+
 
 		
 		function gameLoop(){
 			requestAnimationFrame(gameLoop);
 			
 			state();
-			proton.update();
 			renderer.render(stage);
 
 		}
@@ -105,6 +110,21 @@
 
 			explorer.x += explorer.vx;
 			explorer.y += explorer.vy;
+			if(typeof missiles !== 'undefined' && missiles.length !== 0 ){
+				missiles.forEach(function(missile){
+					missile.x += missile.vx;
+					missile.y += missile.vy;
+				});
+			}
+			
+		}
+
+		function setupMouseHandler(){
+			document.onmousemove = function(event){
+				var rect = renderer.view.getBoundingClientRect();
+				mousePos.x = event.clientX - rect.left;
+				mousePos.y = event.clientY - rect.top;
+			}
 		}
 
 		function setupKeyHandler(){
@@ -114,56 +134,13 @@
 			var down = keyboard(83);
 			var space = keyboard(32);
 			space.press = function(){
-
-				proton = new Proton();
-				emitter = new Proton.Emitter();
-
-				//set Rate
-				emitter.rate = new Proton.Rate(Proton.getSpan(10, 20), 0.1);
-
-				//add Initialize
-				//emitter.addInitialize(new Proton.Radius(1, 12));
-				emitter.addInitialize(new Proton.ImageTarget(TextureCache["treasure.png"]));
-				emitter.addInitialize(new Proton.Life(2, 4));
-				emitter.addInitialize(new Proton.Velocity(3, Proton.getSpan(0, 360), 'polar'));
-
-				//add Behaviour
-				emitter.addBehaviour(new Proton.Color('ff0000', 'random'));
-				emitter.addBehaviour(new Proton.Alpha(1, 0));
-
-				//set emitter position
-				emitter.p.x = explorer.x;
-				emitter.p.y = explorer.y;
-				emitter.emit();
-
-				//add emitter to the proton
-				proton.addEmitter(emitter);
-
-				// add canvas renderer
-				var renderer = new Proton.Renderer('other', proton);
-				renderer.onProtonUpdate = function(){
-					emitter.p.x = explorer.x;
-					emitter.p.y = explorer.y;
-				};
-				renderer.onParticleCreated = function(particle){
-					var particleSprite = new Sprite(particle.target);
-					particle.sprite = particleSprite;
-					stage.addChild(particle.sprite);
-				};
-				renderer.onParticleUpdate = function(particle){
-					transformSprite(particle.sprite, particle);
-				};
-				renderer.onParticleDead = function(particle){
-					stage.removeChild(particle.sprite);
-				};
-				renderer.start();
-
-				//use Euler integration calculation is more accurate (default false)
-				//Proton.USE_CLOCK = false or true;
-				console.log("pressed e");
-			}
+				let circle = new PIXI.Graphics();
+				circle.beginFill(0x000000);
+				circle.drawCircle(0,0,5);
+				circle.endFill();
+				missileLauncher(explorer, mousePos, circle, 2);
+			} 
 			space.release = function(){
-				emitter.end();
 			}
 			left.press = function(){
 				explorer.vx = -1;
@@ -204,6 +181,76 @@
 				explorer.vy = 0;
 			}
 		}
+		/*
+		shooter - shooter object that has the attributes x and y i.e. shooter.x and shooter.y
+		target - target object that has the attributes x and y i.e. target.x and target.y 
+		missileSprite - object that can be added to stage which should represent the missile
+						that is being shot, need x and y attributes
+		missileSpeed - the speed that the missile moves at
+
+		Example: shooter can be your character and the target can be your mouse position. Shooting
+				 a bullet(missileSprite) with a certain speed(missileSpeed) from a gun. 
+		*/
+		function missileLauncher(shooter, target, missileSprite, missileSpeed){
+			let bullet = missileSprite;
+			let bDx, bDy, vx, vy;
+			let bulletSpeed = missileSpeed;
+			bDx = shooter.x - (target.x -(bullet.width/2));
+			bDy = shooter.y - (target.y -(bullet.height/2)); 
+
+			vx = (Math.abs(bDx)/(Math.abs(bDx)+Math.abs(bDy))) * bulletSpeed;
+			vy = (Math.abs(bDy)/(Math.abs(bDx)+Math.abs(bDy))) * bulletSpeed;
+			// bullet.x = shooter.x + (shooter.width/2);
+			// bullet.y = shooter.y + (shooter.height/2);
+			bullet.x = shooter.centerX;
+			bullet.y = shooter.centerY;
+			if(bDx > 0){
+				bullet.vx = -vx;
+			} else {
+				bullet.vx = vx;
+			}
+			if(bDy > 0){
+				bullet.vy = -vy;
+			} else {
+				bullet.vy = vy;
+			}
+
+			missiles.push(bullet);
+			stage.addChild(bullet);
+		}
+
+		function contain(sprite, container) {
+
+			var collision = undefined;
+
+			//Left
+			if (sprite.x < container.x) {
+			sprite.x = container.x;
+			collision = "left";
+			}
+
+			//Top
+			if (sprite.y < container.y) {
+			sprite.y = container.y;
+			collision = "top";
+			}
+
+			//Right
+			if (sprite.x + sprite.width > container.width) {
+			sprite.x = container.width - sprite.width;
+			collision = "right";
+			}
+
+			//Bottom
+			if (sprite.y + sprite.height > container.height) {
+			sprite.y = container.height - sprite.height;
+			collision = "bottom";
+			}
+
+			//Return the `collision` value
+			return collision;
+		}
+
 
 		function transformSprite(particleSprite, particle){
 			particleSprite.position.x = particle.p.x;
