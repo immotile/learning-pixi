@@ -2,13 +2,14 @@
 <html>
 <head>
 	<meta charset="utf-8">
-	<title>Hello world</title>
+	<!--<link rel="shortcut icon" href="">-->
+	<title>Dungeon shooter</title>
 </head>
-	<script src="pixi.min.js"></script>
-	<script src="proton-2.1.0.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/4.5.1/pixi.min.js"></script>
+
 <body>
 	<script type="text/javascript">
-		
+
 		//ALIASES
 		var Container = PIXI.Container,
 			autoDetectRenderer = PIXI.autoDetectRenderer,
@@ -29,14 +30,14 @@
 			});
 		//renderer.view.style.position = "absolute";
 		//renderer.view.style.display = "block";
-		
-			
+
+
 
 		//renderer.view.style.border = "1px dashed black";
 		document.body.appendChild(renderer.view);
 		var stage = new Container();
 		renderer.render(stage);
-		
+
 
 		loader.add("images/treasureHunter.json")
 			.on("progress", loadProgressHandler)
@@ -45,9 +46,6 @@
 		var dungeon, explorer, treasure, door, id;
 		var missiles = [];
 		var state;
-
-		var proton = new Proton();
-		var emitter = new Proton.Emitter();
 
 		function setup(){
 			//var cat = new Sprite(
@@ -61,7 +59,7 @@
 			stage.addChild(treasure);
 			door = new Sprite(TextureCache["door.png"]);
 			stage.addChild(door);
-			
+
 			door.position.set(32, 0);
 
 			explorer.x = 68;
@@ -86,37 +84,54 @@
 				blob.position.set(x, y);
 				stage.addChild(blob);
 			}
-			contain(explorer, {x: 28, y: 10, width: 488, height: 480});
+
 			state = play;
 			renderer.resize(stage.width, stage.height);
 			renderer.render(stage);
-			setupKeyHandler();	
+			setupKeyHandler();
 			setupMouseHandler()
 			gameLoop();
 		}
 
 
 
-		
+
 		function gameLoop(){
 			requestAnimationFrame(gameLoop);
-			
+
 			state();
-			renderer.render(stage);
+			this.renderer.render(this.stage);
 
 		}
 
 		function play(){
 
-			explorer.x += explorer.vx;
-			explorer.y += explorer.vy;
+			moveExplorer();
 			if(typeof missiles !== 'undefined' && missiles.length !== 0 ){
 				missiles.forEach(function(missile){
 					missile.x += missile.vx;
 					missile.y += missile.vy;
 				});
 			}
-			
+
+		}
+
+		function moveExplorer(){
+			var atBorder = contain(explorer, {x: 28, y: 10, width: 488, height: 480});
+			if(atBorder !== undefined){
+				switch(atBorder){
+					case "left" || "right":
+						explorer.vx = 0;
+						break;
+					case "top" || "bottom":
+						explorer.vy = 0;
+						break;
+					default :
+						break;
+				}
+			}
+			explorer.x += explorer.vx;
+			explorer.y += explorer.vy;
 		}
 
 		function setupMouseHandler(){
@@ -124,6 +139,15 @@
 				var rect = renderer.view.getBoundingClientRect();
 				mousePos.x = event.clientX - rect.left;
 				mousePos.y = event.clientY - rect.top;
+
+			}
+			document.onmousedown = function(event){
+				var circle = new PIXI.Graphics();
+				circle.beginFill(0x000000);
+				circle.drawCircle(0,0,5);
+				circle.endFill();
+				//var bullet = new Sprite(TextureCache["treasure.png"]);
+				missileLauncher(explorer, mousePos, circle, 4);
 			}
 		}
 
@@ -134,17 +158,14 @@
 			var down = keyboard(83);
 			var space = keyboard(32);
 			space.press = function(){
-				let circle = new PIXI.Graphics();
-				circle.beginFill(0x000000);
-				circle.drawCircle(0,0,5);
-				circle.endFill();
-				missileLauncher(explorer, mousePos, circle, 2);
-			} 
+
+			}
 			space.release = function(){
 			}
 			left.press = function(){
+
 				explorer.vx = -1;
-				
+
 			}
 			left.release = function(){
 				if(!right.isDown && explorer.vy === 0){
@@ -183,27 +204,36 @@
 		}
 		/*
 		shooter - shooter object that has the attributes x and y i.e. shooter.x and shooter.y
-		target - target object that has the attributes x and y i.e. target.x and target.y 
+		target - target object that has the attributes x and y i.e. target.x and target.y
 		missileSprite - object that can be added to stage which should represent the missile
 						that is being shot, need x and y attributes
 		missileSpeed - the speed that the missile moves at
 
 		Example: shooter can be your character and the target can be your mouse position. Shooting
-				 a bullet(missileSprite) with a certain speed(missileSpeed) from a gun. 
+				 a bullet(missileSprite) with a certain speed(missileSpeed) from a gun.
 		*/
 		function missileLauncher(shooter, target, missileSprite, missileSpeed){
-			let bullet = missileSprite;
-			let bDx, bDy, vx, vy;
-			let bulletSpeed = missileSpeed;
-			bDx = shooter.x - (target.x -(bullet.width/2));
-			bDy = shooter.y - (target.y -(bullet.height/2)); 
+			var bullet = missileSprite;
+			var bDx, bDy, vx, vy;
+			var bulletSpeed = missileSpeed;
+			var shooterCenterX = shooter.x + (shooter.width/2);
+			var shooterCenterY = shooter.y + (shooter.height/2);
 
-			vx = (Math.abs(bDx)/(Math.abs(bDx)+Math.abs(bDy))) * bulletSpeed;
-			vy = (Math.abs(bDy)/(Math.abs(bDx)+Math.abs(bDy))) * bulletSpeed;
-			// bullet.x = shooter.x + (shooter.width/2);
-			// bullet.y = shooter.y + (shooter.height/2);
-			bullet.x = shooter.centerX;
-			bullet.y = shooter.centerY;
+			bDx = shooterCenterX - (target.x);
+			bDy = shooterCenterY - (target.y);
+
+			vx = (Math.abs(bDx)/(Math.abs(bDx)+Math.abs(bDy)));
+			vy = (Math.abs(bDy)/(Math.abs(bDx)+Math.abs(bDy)));
+			if(vx > vy){
+				vx = bulletSpeed;
+				vy = bulletSpeed*vy;
+			} else {
+				vx = bulletSpeed*vx;
+				vy = bulletSpeed;
+			}
+			bullet.x = shooterCenterX;
+			bullet.y = shooterCenterY;
+
 			if(bDx > 0){
 				bullet.vx = -vx;
 			} else {
@@ -217,6 +247,7 @@
 
 			missiles.push(bullet);
 			stage.addChild(bullet);
+			//console.log(missiles.length);
 		}
 
 		function contain(sprite, container) {
@@ -225,26 +256,26 @@
 
 			//Left
 			if (sprite.x < container.x) {
-			sprite.x = container.x;
-			collision = "left";
+				sprite.x = container.x;
+				collision = "left";
 			}
 
 			//Top
 			if (sprite.y < container.y) {
-			sprite.y = container.y;
-			collision = "top";
+				sprite.y = container.y;
+				collision = "top";
 			}
 
 			//Right
 			if (sprite.x + sprite.width > container.width) {
-			sprite.x = container.width - sprite.width;
-			collision = "right";
+				sprite.x = container.width - sprite.width;
+				collision = "right";
 			}
 
 			//Bottom
 			if (sprite.y + sprite.height > container.height) {
-			sprite.y = container.height - sprite.height;
-			collision = "bottom";
+				sprite.y = container.height - sprite.height;
+				collision = "bottom";
 			}
 
 			//Return the `collision` value
