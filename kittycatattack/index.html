@@ -146,7 +146,7 @@
 				circle.beginFill(0x000000);
 				circle.drawCircle(0,0,5);
 				circle.endFill();
-				//var bullet = new Sprite(TextureCache["treasure.png"]);
+				// var bullet = new Sprite(TextureCache["treasure.png"]);
 				missileLauncher(explorer, mousePos, circle, 4);
 			}
 		}
@@ -218,37 +218,18 @@
 			var bulletSpeed = missileSpeed;
 			var shooterCenterX = shooter.x + (shooter.width/2);
 			var shooterCenterY = shooter.y + (shooter.height/2);
-
 			
-			bDx = shooterCenterX - (target.x);
-			bDy = shooterCenterY - (target.y);
-
-			vx = (Math.abs(bDx)/(Math.abs(bDx)+Math.abs(bDy)));
-			vy = (Math.abs(bDy)/(Math.abs(bDx)+Math.abs(bDy)));
-			if(vx > vy){
-				vx = bulletSpeed;
-				vy = bulletSpeed*vy;
-			} else {
-				vx = bulletSpeed*vx;
-				vy = bulletSpeed;
-			}
+			bDx = target.x - shooterCenterX;
+			bDy = target.y - shooterCenterY;
+			bullet.rotation = Math.atan2(bDy, bDx);
+			
+			bullet.vx = Math.cos(bullet.rotation)*bulletSpeed;
+			bullet.vy = Math.sin(bullet.rotation)*bulletSpeed;
 			bullet.x = shooterCenterX;
 			bullet.y = shooterCenterY;
 
-			if(bDx > 0){
-				bullet.vx = -vx;
-			} else {
-				bullet.vx = vx;
-			}
-			if(bDy > 0){
-				bullet.vy = -vy;
-			} else {
-				bullet.vy = vy;
-			}
-
 			missiles.push(bullet);
 			stage.addChild(bullet);
-			//console.log(missiles.length);
 		}
 
 		function contain(sprite, container) {
