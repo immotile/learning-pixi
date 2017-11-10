@@ -20,7 +20,13 @@
 			pContainer = new PIXI.particles.ParticleContainer();
 
 		var mousePos = {x: 0, y: 0};
-
+		var mapObject = {object : undefined, pos : {x : 0, y : 0}};
+		var tileMapObjectsList = [];
+		// "x0y0" to map object []
+		var coordToObjectMap = new Map();
+		// map object to "x0y0"
+		var objectToCoordMap = new Map();
+		var tilesInYAxis = 32, tilesInXAxis = 32;
 		var renderer = autoDetectRenderer(
 			256, 256,
 			{
@@ -82,9 +88,10 @@
 				var y = randomInt(0, stage.height - blob.height);
 
 				blob.position.set(x, y);
+				addNewObjectToTileMap(blob);
 				stage.addChild(blob);
 			}
-
+			addNewObjectToTileMap(explorer);
 			state = play;
 			renderer.resize(stage.width, stage.height);
 			renderer.render(stage);
@@ -93,7 +100,27 @@
 			gameLoop();
 		}
 
+		function addNewObjectToTileMap(newObject){
+		
+			mapObject.object = newObject;
+			mapObject.pos.x = Math.floor(newObject.x/tilesInXAxis);
+			mapObject.pos.y = Math.floor(newObject.y/tilesInYAxis);
+			//tileMapObjectsList.push(mapObject);
+			//coordToObjectMap.set(getCoordString(mapObject.pos), newObject);
+		}
 
+		function getCoordString(object){
+			return "x"+object.x+"y"+object.y;
+		}
+
+		function checkCollisions(){
+			for(var i = 0; i < tileMapObjectsList; i++){
+				var child = tileMapObjectsList[i];
+				var tileMapX = Math.floor(child.x/tilesInXAxis);
+				var tileMapY = Math.floor(child.y/tilesInYAxis);
+
+			}
+		}
 
 
 		function gameLoop(){
@@ -107,13 +134,37 @@
 		function play(){
 
 			moveExplorer();
+			//updateMapState();
+			//checkCollisions();
 			if(typeof missiles !== 'undefined' && missiles.length !== 0 ){
 				missiles.forEach(function(missile){
 					missile.x += missile.vx;
 					missile.y += missile.vy;
+					//objectToCoordMap.set(missile, getTileMapCoords(missile));
+
 				});
 			}
 
+		}
+
+		function updateMapState(){
+			for(var i = 0; i < stage.children.length; i++){
+				var mapObject = stage.children[i];
+				if(getCoordString(mapObject) === objectToCoordMap.get(mapObject)){
+					continue;
+				} else {
+					objectToCoordMap.set(mapObject, getTileMapCoords(mapObject));
+					var object = coordToObjectMap.get(getCoordString(mapObject));
+					if(mapObject === object){
+						coordToObjectMap.set()
+					}
+				}
+
+			}
+		}
+
+		function getTileMapCoords(object){
+			return {x : Math.floor(object.x/tilesInXAxis), y : Math.floor(object.y/tilesInYAxis)};
 		}
 
 		function moveExplorer(){
@@ -130,8 +181,11 @@
 						break;
 				}
 			}
+			var oldPos = coordToObjectMap.get(getCoordString(explorer));
+			objectToCoordMap.set(explorer, getTileMapCoords(explorer));
 			explorer.x += explorer.vx;
 			explorer.y += explorer.vy;
+
 		}
 
 		function setupMouseHandler(){
@@ -146,6 +200,7 @@
 				circle.beginFill(0x000000);
 				circle.drawCircle(0,0,5);
 				circle.endFill();
+				//circle.anchor(0.5, 0.5);
 				// var bullet = new Sprite(TextureCache["treasure.png"]);
 				missileLauncher(explorer, mousePos, circle, 4);
 			}
@@ -156,12 +211,7 @@
 			var right = keyboard(68);
 			var up = keyboard(87);
 			var down = keyboard(83);
-			var space = keyboard(32);
-			space.press = function(){
-
-			}
-			space.release = function(){
-			}
+			
 			left.press = function(){
 
 				explorer.vx = -1;
@@ -229,6 +279,7 @@
 			bullet.y = shooterCenterY;
 
 			missiles.push(bullet);
+			addNewObjectToTileMap(bullet);
 			stage.addChild(bullet);
 		}
 
@@ -264,6 +315,9 @@
 			return collision;
 		}
 
+		function collisionDetection(){
+			
+		}
 
 		function transformSprite(particleSprite, particle){
 			particleSprite.position.x = particle.p.x;
