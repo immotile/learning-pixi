@@ -23,7 +23,7 @@
 		var mapObject = {object : undefined, pos : {x : 0, y : 0}};
 		var tileMapObjectsList = [];
 		// "x0y0" to map object []
-		var coordToObjectMap = new Map();
+		var coordToObjectListMap = new Map();
 		// map object to "x0y0"
 		var objectToCoordMap = new Map();
 		var tilesInYAxis = 32, tilesInXAxis = 32;
@@ -36,7 +36,7 @@
 			});
 		//renderer.view.style.position = "absolute";
 		//renderer.view.style.display = "block";
-
+		var containment = {x: 28, y: 10, width: 488, height: 480};
 
 
 		//renderer.view.style.border = "1px dashed black";
@@ -91,6 +91,9 @@
 				addNewObjectToTileMap(blob);
 				stage.addChild(blob);
 			}
+			//addNewObjectToTileMap(dungeon);
+			//addNewObjectToTileMap(door);
+			addNewObjectToTileMap(treasure);
 			addNewObjectToTileMap(explorer);
 			state = play;
 			renderer.resize(stage.width, stage.height);
@@ -100,13 +103,18 @@
 			gameLoop();
 		}
 
-		function addNewObjectToTileMap(newObject){
+		function addNewObjectToTileMap(newObject){	
 		
-			mapObject.object = newObject;
-			mapObject.pos.x = Math.floor(newObject.x/tilesInXAxis);
-			mapObject.pos.y = Math.floor(newObject.y/tilesInYAxis);
-			//tileMapObjectsList.push(mapObject);
-			//coordToObjectMap.set(getCoordString(mapObject.pos), newObject);
+			var objectList = [];
+			var objectCoord = getCoordString(getTileMapCoords(newObject));
+
+			if(coordToObjectListMap.has(objectCoord)){
+				objectList = coordToObjectListMap.get(objectCoord);	
+			}
+			objectList.push(newObject);
+			coordToObjectListMap.set(objectCoord, objectList);
+			objectToCoordMap.set(newObject, objectCoord);
+			tileMapObjectsList.push(newObject);
 		}
 
 		function getCoordString(object){
@@ -114,18 +122,105 @@
 		}
 
 		function checkCollisions(){
-			for(var i = 0; i < tileMapObjectsList; i++){
-				var child = tileMapObjectsList[i];
-				var tileMapX = Math.floor(child.x/tilesInXAxis);
-				var tileMapY = Math.floor(child.y/tilesInYAxis);
-
+			//1* Checking missile collisions with walls 
+			for(var i = 0; i < missiles.length; i++){
+				var missile = missiles[i];
+				var isContained = contain(missile ,containment);
+				var posStruct = {x : missile.worldTransform.tx, y : missile.worldTransform.ty};
+				var missileCoord = getCoordString(getTileMapCoords(posStruct));
+				if(isContained !== undefined){
+					objectToCoordMap.delete(missile);
+					var missilesToRemove = coordToObjectListMap.get(missileCoord);
+					if(missilesToRemove != undefined){
+						for(var i = 0; i < missilesToRemove.length; i++){
+							if(missile === missilesToRemove[i]){
+								missilesToRemove.slice(i,i);	
+								break;
+							}					
+						}
+					}
+					stage.removeChild(missile);
+				}
 			}
+			//1*
+			var neighborMods = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]]
+			for(var i = 0; i < tileMapObjectsList.length; i++){
+				var mapObject = tileMapObjectsList[i];
+				var posStruct = {x : mapObject.worldTransform.tx, y : mapObject.worldTransform.ty};
+				var objectCoords = getTileMapCoords(posStruct);
+				for(var j = 0; j < 8; j++){
+					var mod = neighborMods[j];
+					var x = objectCoords.x + mod[0];
+					var y = objectCoords.y + mod[1]; 
+					var struct = {x : x, y : y};
+					var coordString = getCoordString(struct);
+					if(coordToObjectListMap.has(coordString)){
+						var list = coordToObjectListMap.get(coordString);
+						for(var k = 0; k < list.length; k++){
+							if(rectanlgeCollision(list[k], mapObject)){
+								console.log(list[k]);
+								removeObjectFromStage(list[k]);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		function rectanlgeCollision(r1, r2){
+			//Define the variables we'll need to calculate
+			var hit, combinedHalfWidths, combinedHalfHeights, vx, vy;
+
+			//hit will determine whether there's a collision
+			hit = false;
+
+			//Find the center points of each sprite
+			r1.centerX = r1.x + r1.width / 2;
+			r1.centerY = r1.y + r1.height / 2;
+			r2.centerX = r2.x + r2.width / 2;
+			r2.centerY = r2.y + r2.height / 2;
+
+			//Find the half-widths and half-heights of each sprite
+			r1.halfWidth = r1.width / 2;
+			r1.halfHeight = r1.height / 2;
+			r2.halfWidth = r2.width / 2;
+			r2.halfHeight = r2.height / 2;
+
+			//Calculate the distance vector between the sprites
+			vx = r1.centerX - r2.centerX;
+			vy = r1.centerY - r2.centerY;
+
+			//Figure out the combined half-widths and half-heights
+			combinedHalfWidths = r1.halfWidth + r2.halfWidth;
+			combinedHalfHeights = r1.halfHeight + r2.halfHeight;
+
+			//Check for a collision on the x axis
+			if (Math.abs(vx) < combinedHalfWidths) {
+
+				//A collision might be occuring. Check for a collision on the y axis
+				if (Math.abs(vy) < combinedHalfHeights) {
+
+				  //There's definitely a collision happening
+				  hit = true;
+				} else {
+
+				  //There's no collision on the y axis
+				  hit = false;
+				}
+			} else {
+
+				//There's no collision on the x axis
+				hit = false;
+			}
+
+			//`hit` will be either `true` or `false`
+			return hit;
 		}
 
 
 		function gameLoop(){
 			requestAnimationFrame(gameLoop);
-
+			
 			state();
 			this.renderer.render(this.stage);
 
@@ -133,9 +228,75 @@
 
 		function play(){
 
+			//MOVE EVERYTHING
 			moveExplorer();
-			//updateMapState();
-			//checkCollisions();
+			moveMissiles();
+
+			// UPDATE TILE MAP FOR THE NEW POSITIONS
+			updateMapState();
+
+			// CHECK FOR COLLISIONS
+			checkCollisions();
+			
+
+		}
+
+		function removeObjectFromStage(object){
+			var objectCoord = getCoordString(getTileMapCoords(object));
+			if(coordToObjectListMap.has(objectCoord)){
+				var objectList = coordToObjectListMap.get(objectCoord);
+				for(var i = 0; i < objectList.length; i++){
+					if(mapObject === objectList[i]){
+						objectList.slice(i,i);	
+						break;
+					}					
+				}
+			}
+			for(var i = 0; i < tileMapObjectsList.length; i++){
+				var o = tileMapObjectsList[i];
+				if(o === object){
+					tileMapObjectsList.slice(i,i);	
+					break;
+				}
+			}
+			objectToCoordMap.delete(object);
+			stage.removeChild(object);
+		}
+
+		function updateMapState(){
+
+			for(var i = 0; i < tileMapObjectsList.length; i++){
+				var mapObject = tileMapObjectsList[i];
+				var objectCoord = getCoordString(getTileMapCoords(mapObject));
+				
+				if(objectCoord === objectToCoordMap.get(mapObject)){
+					continue;
+				} else {
+					objectToCoordMap.set(mapObject, objectCoord);
+					var objectList = [];
+
+					if(coordToObjectListMap.has(objectCoord)){
+						objectList = coordToObjectListMap.get(objectCoord);
+					}
+					for(var i = 0; i < objectList.length; i++){
+						if(mapObject === objectList[i]){
+							objectList.slice(i,i);	
+							break;
+						}					
+					}
+					coordToObjectListMap.set(objectCoord, objectList);
+				
+					
+				}
+				
+			}
+		}
+
+		function getTileMapCoords(object){
+			return {x : Math.floor(object.x/tilesInXAxis), y : Math.floor(object.y/tilesInYAxis)};
+		}
+
+		function moveMissiles(){
 			if(typeof missiles !== 'undefined' && missiles.length !== 0 ){
 				missiles.forEach(function(missile){
 					missile.x += missile.vx;
@@ -144,31 +305,10 @@
 
 				});
 			}
-
-		}
-
-		function updateMapState(){
-			for(var i = 0; i < stage.children.length; i++){
-				var mapObject = stage.children[i];
-				if(getCoordString(mapObject) === objectToCoordMap.get(mapObject)){
-					continue;
-				} else {
-					objectToCoordMap.set(mapObject, getTileMapCoords(mapObject));
-					var object = coordToObjectMap.get(getCoordString(mapObject));
-					if(mapObject === object){
-						coordToObjectMap.set()
-					}
-				}
-
-			}
-		}
-
-		function getTileMapCoords(object){
-			return {x : Math.floor(object.x/tilesInXAxis), y : Math.floor(object.y/tilesInYAxis)};
 		}
 
 		function moveExplorer(){
-			var atBorder = contain(explorer, {x: 28, y: 10, width: 488, height: 480});
+			var atBorder = contain(explorer, containment);
 			if(atBorder !== undefined){
 				switch(atBorder){
 					case "left" || "right":
@@ -181,8 +321,8 @@
 						break;
 				}
 			}
-			var oldPos = coordToObjectMap.get(getCoordString(explorer));
-			objectToCoordMap.set(explorer, getTileMapCoords(explorer));
+			//var oldPos = coordToObjectListMap.get(getCoordString(explorer));
+
 			explorer.x += explorer.vx;
 			explorer.y += explorer.vy;
 
@@ -313,10 +453,6 @@
 
 			//Return the `collision` value
 			return collision;
-		}
-
-		function collisionDetection(){
-			
 		}
 
 		function transformSprite(particleSprite, particle){
