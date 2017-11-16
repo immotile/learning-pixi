@@ -34,7 +34,7 @@
 				transparent: false,
 				resolution: 1
 			});
-		//renderer.view.style.position = "absolute";
+		renderer.view.style.position = "absolute";
 		//renderer.view.style.display = "block";
 		var containment = {x: 28, y: 10, width: 488, height: 480};
 
@@ -53,6 +53,8 @@
 		var missiles = [];
 		var state;
 
+
+
 		function setup(){
 			//var cat = new Sprite(
 			//	resources["images/cat.png"].texture
@@ -68,7 +70,7 @@
 
 			door.position.set(32, 0);
 
-			explorer.x = 68;
+			explorer.x = 64;
 			explorer.y = stage.height / 2 - explorer.height / 2;
 			explorer.vx = 0;
 			explorer.vy = 0;
@@ -86,8 +88,13 @@
 				var x = spacing * i + xOffset;
 
 				var y = randomInt(0, stage.height - blob.height);
-
+				
+				
 				blob.position.set(x, y);
+				var contained = contain(blob, containment);
+				if(contained !== undefined){
+					continue;
+				}
 				addNewObjectToTileMap(blob);
 				stage.addChild(blob);
 			}
@@ -96,11 +103,23 @@
 			addNewObjectToTileMap(treasure);
 			addNewObjectToTileMap(explorer);
 			state = play;
-			renderer.resize(stage.width, stage.height);
+			//renderer.resize(stage.width, stage.height);
+			renderer.resize(128, 128);
+			//renderer.view.style.left = 0+"px";
+			//renderer.view.style.top = 256+"px";
 			renderer.render(stage);
 			setupKeyHandler();
 			setupMouseHandler()
 			gameLoop();
+		}
+
+		function Camera(follow, viewWidth, viewHeight, worldWidth, worldHeight){
+			this.follow = follow;
+			this.viewWidth = viewWidth;
+			this.viewHeight = viewHeight;
+			this.worldWidth = worldWidth;
+			this.worldHeight = worldHeight;
+
 		}
 
 		function addNewObjectToTileMap(newObject){	
@@ -134,7 +153,7 @@
 					if(missilesToRemove != undefined){
 						for(var i = 0; i < missilesToRemove.length; i++){
 							if(missile === missilesToRemove[i]){
-								missilesToRemove.slice(i,i);	
+								missilesToRemove.splice(i,1);	
 								break;
 							}					
 						}
@@ -146,6 +165,7 @@
 			var neighborMods = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]]
 			for(var i = 0; i < tileMapObjectsList.length; i++){
 				var mapObject = tileMapObjectsList[i];
+
 				var posStruct = {x : mapObject.worldTransform.tx, y : mapObject.worldTransform.ty};
 				var objectCoords = getTileMapCoords(posStruct);
 				for(var j = 0; j < 8; j++){
@@ -157,9 +177,9 @@
 					if(coordToObjectListMap.has(coordString)){
 						var list = coordToObjectListMap.get(coordString);
 						for(var k = 0; k < list.length; k++){
-							if(rectanlgeCollision(list[k], mapObject)){
-								console.log(list[k]);
-								removeObjectFromStage(list[k]);
+							if(mapObject !== explorer && list[k] !== explorer && list[k] !== mapObject && rectanlgeCollision(list[k], mapObject)){
+								
+								removeObjectFromStage(list[k]);	
 							}
 						}
 					}
@@ -247,7 +267,7 @@
 				var objectList = coordToObjectListMap.get(objectCoord);
 				for(var i = 0; i < objectList.length; i++){
 					if(mapObject === objectList[i]){
-						objectList.slice(i,i);	
+						objectList.splice(i,1);	
 						break;
 					}					
 				}
@@ -255,7 +275,7 @@
 			for(var i = 0; i < tileMapObjectsList.length; i++){
 				var o = tileMapObjectsList[i];
 				if(o === object){
-					tileMapObjectsList.slice(i,i);	
+					tileMapObjectsList.splice(i,1);	
 					break;
 				}
 			}
@@ -280,7 +300,7 @@
 					}
 					for(var i = 0; i < objectList.length; i++){
 						if(mapObject === objectList[i]){
-							objectList.slice(i,i);	
+							objectList.splice(i,1);	
 							break;
 						}					
 					}
