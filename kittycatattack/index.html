@@ -19,7 +19,7 @@
 			TextureCache = PIXI.utils.TextureCache,
 			pContainer = new PIXI.particles.ParticleContainer();
 
-		var mousePos = {x: 0, y: 0};
+		var mousePos;
 		var mapObject = {object : undefined, pos : {x : 0, y : 0}};
 		var tileMapObjectsList = [];
 		// "x0y0" to map object []
@@ -42,8 +42,9 @@
 		//renderer.view.style.border = "1px dashed black";
 		document.body.appendChild(renderer.view);
 		var stage = new Container();
+		var camera = new Container();
 		renderer.render(stage);
-
+		stage.interactive = true;
 
 		loader.add("images/treasureHunter.json")
 			.on("progress", loadProgressHandler)
@@ -104,10 +105,19 @@
 			addNewObjectToTileMap(explorer);
 			state = play;
 			//renderer.resize(stage.width, stage.height);
-			renderer.resize(128, 128);
-			//renderer.view.style.left = 0+"px";
-			//renderer.view.style.top = 256+"px";
-			renderer.render(stage);
+			//renderer.resize(128, 128);
+			//renderer.view.style.left = explorer.x+"px";
+			//renderer.view.style.top = explorer.y+"px";
+			//stage.position.set(explorer.x, explorer.y);
+			//stage._frame.x = explorer.x;
+			// stage._frame.y = explorer.y;
+			camera.pivot.x = explorer.x;
+			camera.pivot.y = explorer.y;
+			camera.position.x = renderer.width/2;
+			camera.position.y = renderer.height/2;
+			camera.addChild(stage);
+			renderer.render(camera);
+			
 			setupKeyHandler();
 			setupMouseHandler()
 			gameLoop();
@@ -166,14 +176,18 @@
 			for(var i = 0; i < tileMapObjectsList.length; i++){
 				var mapObject = tileMapObjectsList[i];
 
-				var posStruct = {x : mapObject.worldTransform.tx, y : mapObject.worldTransform.ty};
+				// var posStruct = {x : mapObject.worldTransform.tx, y : mapObject.worldTransform.ty};
+
+				var posStruct = stage.toLocal(mapObject);
 				var objectCoords = getTileMapCoords(posStruct);
+				// console.log(objectCoords.x + " " + objectCoords.y);
 				for(var j = 0; j < 8; j++){
 					var mod = neighborMods[j];
 					var x = objectCoords.x + mod[0];
 					var y = objectCoords.y + mod[1]; 
 					var struct = {x : x, y : y};
 					var coordString = getCoordString(struct);
+
 					if(coordToObjectListMap.has(coordString)){
 						var list = coordToObjectListMap.get(coordString);
 						for(var k = 0; k < list.length; k++){
@@ -242,7 +256,8 @@
 			requestAnimationFrame(gameLoop);
 			
 			state();
-			this.renderer.render(this.stage);
+			// this.renderer.render(this.stage);
+			this.renderer.render(this.camera);
 
 		}
 
@@ -251,6 +266,7 @@
 			//MOVE EVERYTHING
 			moveExplorer();
 			moveMissiles();
+			moveCamera();
 
 			// UPDATE TILE MAP FOR THE NEW POSITIONS
 			updateMapState();
@@ -259,6 +275,11 @@
 			checkCollisions();
 			
 
+		}
+
+		function moveCamera(){
+			camera.pivot.x = explorer.x;
+			camera.pivot.y = explorer.y;
 		}
 
 		function removeObjectFromStage(object){
@@ -349,21 +370,36 @@
 		}
 
 		function setupMouseHandler(){
-			document.onmousemove = function(event){
-				var rect = renderer.view.getBoundingClientRect();
-				mousePos.x = event.clientX - rect.left;
-				mousePos.y = event.clientY - rect.top;
+			// document.onmousemove = function(event){
+			// 	var rect = renderer.view.getBoundingClientRect();
+			// 	mousePos.x = event.clientX - rect.left;
+			// 	mousePos.y = event.clientY - rect.top;
+			// 	var pos = event.getLocalPosition(stage);
+			// 	mousePos.x = pos.x;
+			// 	mousePos.y = pos.y;
 
-			}
-			document.onmousedown = function(event){
+			// }
+			// document.onmousedown = function(event){
+			// 	var circle = new PIXI.Graphics();
+			// 	// var rect = renderer.view.getBoundingClientRect();
+			// 	// mousePos.x = event.clientX - rect.left;
+			// 	// mousePos.y = event.clientY - rect.top;
+			// 	sta
+			// 	circle.beginFill(0x000000);
+			// 	circle.drawCircle(0,0,5);
+			// 	circle.endFill();
+			// 	//circle.anchor(0.5, 0.5);
+			// 	// var bullet = new Sprite(TextureCache["treasure.png"]);
+			// 	missileLauncher(explorer, mousePos, circle, 4);
+			// }
+			stage.on('mousedown', function(event){
 				var circle = new PIXI.Graphics();
 				circle.beginFill(0x000000);
 				circle.drawCircle(0,0,5);
 				circle.endFill();
-				//circle.anchor(0.5, 0.5);
-				// var bullet = new Sprite(TextureCache["treasure.png"]);
+				var mousePos = event.data.getLocalPosition(stage);
 				missileLauncher(explorer, mousePos, circle, 4);
-			}
+			});
 		}
 
 		function setupKeyHandler(){
