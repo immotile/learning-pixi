@@ -1,0 +1,584 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<!--<link rel="shortcut icon" href="">-->
+	<title>Dungeon shooter</title>
+</head>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/4.7.1/pixi.min.js"></script>
+
+<body>
+	<script type="text/javascript">
+
+		//ALIASES
+		var Container = PIXI.Container,
+			autoDetectRenderer = PIXI.autoDetectRenderer,
+			loader = PIXI.loader,
+			resources = PIXI.loader.resources,
+			Sprite = PIXI.Sprite,
+			TextureCache = PIXI.utils.TextureCache,
+			pContainer = new PIXI.particles.ParticleContainer();
+
+		var mousePos;
+		var mapObject = {object : undefined, pos : {x : 0, y : 0}};
+		var tileMapObjectsList = [];
+		// "x0y0" to map object []
+		var coordToObjectListMap = new Map();
+		// map object to "x0y0"
+		var objectToCoordMap = new Map();
+		var tilesInYAxis = 32, tilesInXAxis = 32;
+		var renderer = autoDetectRenderer(
+			256, 256,
+			{
+				antialias: false,
+				transparent: false,
+				resolution: 1
+			});
+		renderer.view.style.position = "absolute";
+		//renderer.view.style.display = "block";
+		var containment = {x: 28, y: 10, width: 488, height: 480};
+
+		
+		//renderer.view.style.border = "1px dashed black";
+		document.body.appendChild(renderer.view);
+		var stage = new Container();
+		var camera = new Container();
+		renderer.render(stage);
+		stage.interactive = true;
+
+		loader.add("images/treasureHunter.json",{crossOrigin: 'anonymous'})
+			.on("progress", loadProgressHandler)
+			.load(setup);
+
+		var dungeon, explorer, treasure, door, id;
+		var missiles = [];
+		var state;
+
+
+
+		function setup(){
+			//var cat = new Sprite(
+			//	resources["images/cat.png"].texture
+			//);
+			dungeon = new Sprite(TextureCache["dungeon.png"]);
+			stage.addChild(dungeon);
+			treasure = new Sprite(TextureCache["treasure.png"]);
+			stage.addChild(treasure);
+			door = new Sprite(TextureCache["door.png"]);
+			stage.addChild(door);
+			
+			door.position.set(32, 0);
+			explorer = new Sprite(TextureCache["explorer.png"]);
+			explorer.x = 64;
+			explorer.y = stage.height / 2 - explorer.height / 2;
+			explorer.vx = 0;
+			explorer.vy = 0;
+			treasure.x = stage.width - treasure.width - 48;
+			treasure.y = stage.height / 2 - treasure.height / 2;
+
+			var numberOfBlobs = 6,
+				spacing = 48,
+				xOffset = 150;
+
+			for(var i = 0; i < numberOfBlobs; i++){
+				var blob = new Sprite(TextureCache["blob.png"]);
+
+				// Spacing between blobs, xOffset from left screen border
+				var x = spacing * i + xOffset;
+
+				var y = randomInt(0, stage.height - blob.height);
+				
+				
+				blob.position.set(x, y);
+				var contained = contain(blob, containment);
+				if(contained !== undefined){
+					continue;
+				}
+				addNewObjectToTileMap(blob);
+				stage.addChild(blob);
+			}
+			
+            stage.addChild(explorer);
+			//addNewObjectToTileMap(dungeon);
+			//addNewObjectToTileMap(door);
+			addNewObjectToTileMap(treasure);
+			addNewObjectToTileMap(explorer);
+			state = play;
+			renderer.resize(stage.width, stage.height);
+			//renderer.resize(128, 128);
+			/* renderer.view.style.left = explorer.x+"px";
+			renderer.view.style.top = explorer.y+"px";
+			stage.position.set(explorer.x, explorer.y); */
+			//stage._frame.x = explorer.x;
+			//stage._frame.y = explorer.y;
+			/* camera.pivot.x = explorer.x-explorer.width/2;
+			camera.pivot.y = explorer.y-explorer.height/2;
+			camera.position.x = renderer.width/2;
+			camera.position.y = renderer.height/2;
+			camera.addChild(stage); */
+/* 			renderer.render(camera);/*  */
+ 			
+			setupKeyHandler();
+			setupMouseHandler()
+			gameLoop();
+		}
+
+		function Camera(follow, viewWidth, viewHeight, worldWidth, worldHeight){
+			this.follow = follow;
+			this.viewWidth = viewWidth;
+			this.viewHeight = viewHeight;
+			this.worldWidth = worldWidth;
+			this.worldHeight = worldHeight;
+
+		}
+
+		function addNewObjectToTileMap(newObject){	
+		
+			var objectList = [];
+			var objectCoord = getCoordString(getTileMapCoords(newObject));
+
+			if(coordToObjectListMap.has(objectCoord)){
+				objectList = coordToObjectListMap.get(objectCoord);	
+			}
+			objectList.push(newObject);
+			coordToObjectListMap.set(objectCoord, objectList);
+			objectToCoordMap.set(newObject, objectCoord);
+			tileMapObjectsList.push(newObject);
+		}
+
+		function getCoordString(object){
+			return "x"+object.x+"y"+object.y;
+		}
+
+		function checkCollisions(){
+			//1* Checking missile collisions with walls 
+			if(missiles !== undefined){
+				for(var i = 0; i < missiles.length; i++){
+					var missile = missiles[i];
+					var isContained = contain(missile ,containment);
+					var posStruct = {x : missile.worldTransform.tx, y : missile.worldTransform.ty};
+					var missileCoord = getCoordString(getTileMapCoords(posStruct));
+					if(isContained !== undefined){
+						objectToCoordMap.delete(missile);
+						var missilesToRemove = coordToObjectListMap.get(missileCoord);
+						if(missilesToRemove != undefined){
+							for(var i = 0; i < missilesToRemove.length; i++){
+								if(missile === missilesToRemove[i]){
+									missilesToRemove.splice(i,1);	
+									break;
+								}					
+							}
+						}
+						stage.removeChild(missile);
+					}
+				}
+			}
+			
+			//1*
+			var neighborMods = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+			
+			for(var i = 0; i < tileMapObjectsList.length; i++){
+				var mapObject = tileMapObjectsList[i];
+
+				//var posStruct = {x : mapObject.worldTransform.tx, y : mapObject.worldTransform.ty};
+
+				var posStruct = stage.toLocal(mapObject);
+				var objectCoords = getTileMapCoords(posStruct);
+				// console.log(objectCoords.x + " " + objectCoords.y);
+				
+				for(var j = 0; j < 8; j++){
+					var mod = neighborMods[j];
+					var x = objectCoords.x + mod[0];
+					var y = objectCoords.y + mod[1]; 
+					var struct = {x : x, y : y};
+					var coordString = getCoordString(struct);
+
+					if(coordToObjectListMap.has(coordString)){
+						var list = coordToObjectListMap.get(coordString);
+						for(var k = 0; k < list.length; k++){
+							if(mapObject !== explorer && list[k] !== explorer  && rectanlgeCollision(list[k], mapObject)){
+								objectsToRemove.push(list[k]);
+								
+							}
+						}
+					}
+				}
+			}
+			
+		}
+
+		function rectanlgeCollision(r1, r2){
+			//Define the variables we'll need to calculate
+			var hit, combinedHalfWidths, combinedHalfHeights, vx, vy;
+
+			//hit will determine whether there's a collision
+			hit = false;
+
+			//Find the center points of each sprite
+			r1.centerX = r1.x + r1.width / 2;
+			r1.centerY = r1.y + r1.height / 2;
+			r2.centerX = r2.x + r2.width / 2;
+			r2.centerY = r2.y + r2.height / 2;
+
+			//Find the half-widths and half-heights of each sprite
+			r1.halfWidth = r1.width / 2;
+			r1.halfHeight = r1.height / 2;
+			r2.halfWidth = r2.width / 2;
+			r2.halfHeight = r2.height / 2;
+
+			//Calculate the distance vector between the sprites
+			vx = r1.centerX - r2.centerX;
+			vy = r1.centerY - r2.centerY;
+
+			//Figure out the combined half-widths and half-heights
+			combinedHalfWidths = r1.halfWidth + r2.halfWidth;
+			combinedHalfHeights = r1.halfHeight + r2.halfHeight;
+
+			//Check for a collision on the x axis
+			if (Math.abs(vx) < combinedHalfWidths) {
+
+				//A collision might be occuring. Check for a collision on the y axis
+				if (Math.abs(vy) < combinedHalfHeights) {
+
+				  //There's definitely a collision happening
+				  hit = true;
+				} else {
+
+				  //There's no collision on the y axis
+				  hit = false;
+				}
+			} else {
+
+				//There's no collision on the x axis
+				hit = false;
+			}
+
+			//`hit` will be either `true` or `false`
+			return hit;
+		}
+
+
+		function gameLoop(){
+			requestAnimationFrame(gameLoop);
+			
+			state();
+			this.renderer.render(this.stage);
+			//this.renderer.render(this.camera);
+
+		}
+		var counter = 0;
+		function play(){
+			counter++;
+			//MOVE EVERYTHING
+			moveExplorer();
+			moveMissiles();
+			//moveCamera();
+
+			// UPDATE TILE MAP FOR THE NEW POSITIONS
+			updateMapState();
+
+			// CHECK FOR COLLISIONS
+			checkCollisions();
+			if(counter%20==0){
+				/* console.log(camera.pivot.x);
+				console.log(camera.pivot.y);	 */
+				/* missiles.forEach(i => {
+					console.log(i.x); 
+					console.log(i.y);
+				}) */
+			/* 	console.log(missiles[0].x);
+				console.log(missiles[0].y); */
+			}
+			
+		}
+
+		function moveCamera(){
+			camera.pivot.x = explorer.x;
+			camera.pivot.y = explorer.y;
+		}
+
+		function removeObjectFromStage(object){
+
+			var objectCoord = getCoordString(getTileMapCoords(object));
+			if(coordToObjectListMap.has(objectCoord)){
+				var objectList = coordToObjectListMap.get(objectCoord);
+				for(var i = 0; i < objectList.length; i++){
+					if(mapObject === objectList[i]){
+						objectList.splice(i,1);	
+						break;
+					}					
+				}
+			}
+			for(var i = 0; i < tileMapObjectsList.length; i++){
+				var o = tileMapObjectsList[i];
+				if(o === object){
+					tileMapObjectsList.splice(i,1);	
+					break;
+				}
+			}
+			objectToCoordMap.delete(object);
+			stage.removeChild(object);
+		
+			
+		}
+
+		function updateMapState(){
+
+			for(var i = 0; i < tileMapObjectsList.length; i++){
+				var mapObject = tileMapObjectsList[i];
+				var objectCoord = getCoordString(getTileMapCoords(mapObject));
+				
+				if(objectCoord === objectToCoordMap.get(mapObject)){
+					continue;
+				} else {
+					objectToCoordMap.set(mapObject, objectCoord);
+					var objectList = [];
+
+					if(coordToObjectListMap.has(objectCoord)){
+						objectList = coordToObjectListMap.get(objectCoord);
+					}
+					for(var i = 0; i < objectList.length; i++){
+						if(mapObject === objectList[i]){
+							objectList.splice(i,1);	
+							break;
+						}					
+					}
+					coordToObjectListMap.set(objectCoord, objectList);
+				
+					
+				}
+				
+			}
+		}
+
+		function getTileMapCoords(object){
+			return {x : Math.floor(object.x/tilesInXAxis), y : Math.floor(object.y/tilesInYAxis)};
+		}
+
+		function moveMissiles(){
+			if(typeof missiles !== 'undefined' && missiles.length !== 0 ){
+				missiles.forEach(function(missile){
+					missile.x += missile.vx;
+					missile.y += missile.vy;
+					//objectToCoordMap.set(missile, getTileMapCoords(missile));
+
+				});
+			}
+		}
+
+		function moveExplorer(){
+			var atBorder = contain(explorer, containment);
+			if(atBorder !== undefined){
+				switch(atBorder){
+					case "left" || "right":
+						explorer.vx = 0;
+						break;
+					case "top" || "bottom":
+						explorer.vy = 0;
+						break;
+					default :
+						break;
+				}
+			}
+			//var oldPos = coordToObjectListMap.get(getCoordString(explorer));
+
+			explorer.x += explorer.vx;
+			explorer.y += explorer.vy;
+
+		}
+
+		function setupMouseHandler(){
+			// document.onmousemove = function(event){
+			// 	var rect = renderer.view.getBoundingClientRect();
+			// 	mousePos.x = event.clientX - rect.left;
+			// 	mousePos.y = event.clientY - rect.top;
+			// 	var pos = event.getLocalPosition(stage);
+			// 	mousePos.x = pos.x;
+			// 	mousePos.y = pos.y;
+
+			// }
+			// document.onmousedown = function(event){
+			// 	var circle = new PIXI.Graphics();
+			// 	// var rect = renderer.view.getBoundingClientRect();
+			// 	// mousePos.x = event.clientX - rect.left;
+			// 	// mousePos.y = event.clientY - rect.top;
+			// 	sta
+			// 	circle.beginFill(0x000000);
+			// 	circle.drawCircle(0,0,5);
+			// 	circle.endFill();
+			// 	//circle.anchor(0.5, 0.5);
+			// 	// var bullet = new Sprite(TextureCache["treasure.png"]);
+			// 	missileLauncher(explorer, mousePos, circle, 4);
+			// }
+			stage.on('mousedown', function(event){
+				var circle = new PIXI.Graphics();
+				circle.beginFill(0x000000);
+				circle.drawCircle(0,0,5);
+				circle.endFill();
+				var mousePos = event.data.getLocalPosition(stage);
+				missileLauncher(explorer, mousePos, circle, 4);
+			});
+		}
+
+		function setupKeyHandler(){
+			var left = keyboard(65);
+			var right = keyboard(68);
+			var up = keyboard(87);
+			var down = keyboard(83);
+			
+			left.press = function(){
+
+				explorer.vx = -1;
+
+			}
+			left.release = function(){
+				if(!right.isDown && explorer.vy === 0){
+					explorer.vx = 0;
+				}
+				//OVERRIDE
+				explorer.vx = 0;
+			}
+			right.press = function(){
+				explorer.vx = 1;
+			}
+			right.release = function(){
+				if(!left.isDown && explorer.vy === 0){
+					explorer.vx = 0;
+				}
+				explorer.vx = 0;
+			}
+			up.press = function(){
+				explorer.vy = -1;
+			}
+			up.release = function(){
+				if(!down.isDown && explorer.vy === 0){
+					explorer.vy = 0;
+				}
+				explorer.vy = 0;
+			}
+			down.press = function(){
+				explorer.vy = 1;
+			}
+			down.release = function(){
+				if(!up.isDown && explorer.vy === 0){
+					explorer.vy = 0;
+				}
+				explorer.vy = 0;
+			}
+		}
+		/*
+		shooter - shooter object that has the attributes x and y i.e. shooter.x and shooter.y
+		target - target object that has the attributes x and y i.e. target.x and target.y
+		missileSprite - object that can be added to stage which should represent the missile
+						that is being shot, need x and y attributes
+		missileSpeed - the speed that the missile moves at
+
+		Example: shooter can be your character and the target can be your mouse position. Shooting
+				 a bullet(missileSprite) with a certain speed(missileSpeed) from a gun.
+		*/
+		function missileLauncher(shooter, target, missileSprite, missileSpeed){
+			var bullet = missileSprite;
+			var bDx, bDy, vx, vy;
+			var bulletSpeed = missileSpeed;
+			var shooterCenterX = shooter.x + (shooter.width/2);
+			var shooterCenterY = shooter.y + (shooter.height/2);
+			
+			bDx = target.x - shooterCenterX;
+			bDy = target.y - shooterCenterY;
+			bullet.rotation = Math.atan2(bDy, bDx);
+			
+			bullet.vx = Math.cos(bullet.rotation)*bulletSpeed;
+			bullet.vy = Math.sin(bullet.rotation)*bulletSpeed;
+			bullet.x = shooterCenterX;
+			bullet.y = shooterCenterY;
+
+			missiles.push(bullet);
+			addNewObjectToTileMap(bullet);
+			stage.addChild(bullet);
+		}
+
+		function contain(sprite, container) {
+
+			var collision = undefined;
+
+			//Left
+			if (sprite.x < container.x) {
+				sprite.x = container.x;
+				collision = "left";
+			}
+
+			//Top
+			if (sprite.y < container.y) {
+				sprite.y = container.y;
+				collision = "top";
+			}
+
+			//Right
+			if (sprite.x + sprite.width > container.width) {
+				sprite.x = container.width - sprite.width;
+				collision = "right";
+			}
+
+			//Bottom
+			if (sprite.y + sprite.height > container.height) {
+				sprite.y = container.height - sprite.height;
+				collision = "bottom";
+			}
+
+			//Return the `collision` value
+			return collision;
+		}
+
+		function transformSprite(particleSprite, particle){
+			particleSprite.position.x = particle.p.x;
+			particleSprite.position.y = particle.p.y;
+		}
+
+		function keyboard(keyCode){
+			var key = {};
+			key.code = keyCode;
+			key.isDown = false;
+			key.isUp = true;
+			key.press = undefined;
+			key.release = undefined;
+
+			key.downHandler = function(event) {
+				if(event.keyCode === key.code){
+					if(key.isUp && key.press) key.press();
+					key.isDown = true;
+					key.isUp = false;
+				}
+				event.preventDefault();
+			};
+
+			key.upHandler = function(event) {
+				if(event.keyCode === key.code){
+					if(key.isDown && key.release) key.release();
+					key.isDown = false;
+					key.isUp = true;
+				}
+				event.preventDefault();
+			};
+
+			window.addEventListener(
+				"keydown", key.downHandler.bind(key), false
+			);
+
+			window.addEventListener(
+				"keyup", key.upHandler.bind(key), false
+			);
+			return key;
+		}
+
+		function loadProgressHandler(loader, resource){
+			console.log("loading: ", + resource.url);
+			console.log("progress: ", + loader.progress + "%");
+		}
+
+		function randomInt(min, max){
+			return Math.floor(Math.random() * (max - min + 1)) + min;
+		}
+
+	</script>
+</body>
+</html>
